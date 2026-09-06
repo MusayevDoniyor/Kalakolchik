@@ -1,19 +1,21 @@
 "use strict";
-/**
- * Utility functions for parsing custom dates and intervals.
- * Enhanced validation for graceful error handling.
- */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.parseCustomDate = parseCustomDate;
 exports.parseCycleInterval = parseCycleInterval;
 exports.parseClockTime = parseClockTime;
 exports.parseFlexibleDateYmd = parseFlexibleDateYmd;
 exports.parseRecurrence = parseRecurrence;
+const timezone_1 = require("./timezone");
+/**
+ * Utility functions for parsing custom dates and intervals.
+ * Enhanced validation for graceful error handling.
+ */
 /**
  * Parses a date string in format DD/MM/YYYY or DD/MM/YYYY HH:MM
  * Returns a Date object if valid, null otherwise.
+ * Interprets the wall clock time in the user's `timeZone` (default Asia/Tashkent).
  */
-function parseCustomDate(input) {
+function parseCustomDate(input, timeZone = timezone_1.DEFAULT_TIMEZONE) {
     const str = input.trim();
     // Regex to match DD/MM/YYYY or DD/MM/YYYY HH:MM
     const regex = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?$/;
@@ -21,12 +23,12 @@ function parseCustomDate(input) {
     if (!match)
         return null;
     const day = parseInt(match[1], 10);
-    const month = parseInt(match[2], 10) - 1; // JS months are 0-indexed
+    const month = parseInt(match[2], 10); // 1-12
     const year = parseInt(match[3], 10);
     const hour = match[4] ? parseInt(match[4], 10) : 12; // Default to noon if no time provided
     const minute = match[5] ? parseInt(match[5], 10) : 0;
     // Validate ranges
-    if (month < 0 || month > 11)
+    if (month < 1 || month > 12)
         return null;
     if (day < 1 || day > 31)
         return null;
@@ -35,16 +37,17 @@ function parseCustomDate(input) {
     if (minute < 0 || minute > 59)
         return null;
     if (year < 2024 || year > 2100)
-        return null; // Reasonable year range
-    const date = new Date(year, month, day, hour, minute);
-    // Validate the parsed date (JS Date is forgiving and wraps around invalid days)
-    if (date.getFullYear() !== year ||
-        date.getMonth() !== month ||
-        date.getDate() !== day) {
+        return null;
+    if (!isValidYmd(year, month, day)) {
         return null;
     }
+    const dateYmd = `${year}-${pad(month)}-${pad(day)}`;
+    const timeHm = `${pad(hour)}:${pad(minute)}`;
+    const date = (0, timezone_1.zonedWallTimeToUtc)(dateYmd, timeHm, timeZone);
+    if (!date)
+        return null;
     // Ensure date is in the future
-    if (date <= new Date()) {
+    if (date.getTime() <= Date.now()) {
         return null;
     }
     return date;
@@ -173,6 +176,25 @@ function parseClockTime(input) {
 function parseFlexibleDateYmd(input, todayYmd) {
     const str = input.trim().replace(/^until\s+/i, "");
     const [ty, tm, td] = todayYmd.split("-").map(Number);
+    const cleanStr = str.replace(/^(on|at)\s+/i, "").toLowerCase();
+    const addDaysToToday = (days) => {
+        const baseDate = new Date(Date.UTC(ty, tm - 1, td));
+        baseDate.setUTCDate(baseDate.getUTCDate() + days);
+        return `${baseDate.getUTCFullYear()}-${pad(baseDate.getUTCMonth() + 1)}-${pad(baseDate.getUTCDate())}`;
+    };
+    if (/^(today|bugun)$/i.test(cleanStr))
+        return todayYmd;
+    if (/^(tomorrow|ertaga)$/i.test(cleanStr))
+        return addDaysToToday(1);
+    if (/^(day after tomorrow|indin|indinga)$/i.test(cleanStr))
+        return addDaysToToday(2);
+    const daysLaterMatch = cleanStr.match(/^(\d+)\s+kundan\s+keyin$/i) || cleanStr.match(/^in\s+(\d+)\s+days?$/i);
+    if (daysLaterMatch) {
+        const days = parseInt(daysLaterMatch[1], 10);
+        if (days > 0 && days < 3650) {
+            return addDaysToToday(days);
+        }
+    }
     const iso = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (iso) {
         const year = parseInt(iso[1], 10);
@@ -187,7 +209,7 @@ function parseFlexibleDateYmd(input, todayYmd) {
         const year = parseInt(dmy[3], 10);
         return isValidYmd(year, month, day) ? `${year}-${pad(month)}-${pad(day)}` : null;
     }
-    const named = str.match(/^(?:(\d{1,2})\s+)?(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)(?:\s+(\d{1,2}))?(?:,?\s+(\d{4}))?$/i);
+    const named = str.match(/^(?:(\d{1,2})[-\s]+)?(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec|yanvar|fevral|mart|aprel|mayis|iyun|iyul|avgust|sentabr|sentyabr|oktabr|oktyabr|noyabr|dekabr)(?:[-\s]+(\d{1,2}))?(?:,?\s+(\d{4}))?$/i);
     if (named) {
         const month = MONTHS[named[2].toLowerCase()];
         const day = parseInt(named[1] || named[3], 10);
@@ -201,9 +223,6 @@ function parseFlexibleDateYmd(input, todayYmd) {
         }
         return isValidYmd(year, month, day) ? `${year}-${pad(month)}-${pad(day)}` : null;
     }
-    if (/^(today|bugun)$/i.test(str))
-        return `${ty}-${pad(tm)}-${pad(td)}`;
-    void td;
     return null;
 }
 function parseRecurrence(input) {

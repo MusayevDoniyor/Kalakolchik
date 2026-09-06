@@ -3,12 +3,12 @@ import { BotContext } from "../index";
 
 // ----------------------------------------------------------------
 // /help and /about command handler
-// Provides a clear guide on how to use Kalakolchik.
+// Provides a clear guide on how to use MindSnap.
 // ----------------------------------------------------------------
 
 export async function helpHandler(ctx: CommandContext<BotContext>): Promise<void> {
   const helpText =
-`🔔 *Kalakolchik — Eslatmalar va takrorlash boti*
+`🧠 *MindSnap — Eslatmalar va takrorlash boti*
 
 Bot sizga eslab qolish qiyin bo'lgan ma'lumotlarni unutmaslikka yordam beradi.
 

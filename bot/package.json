@@ -1,5 +1,5 @@
 {
-  "name": "kalakolchik-bot",
+  "name": "mindsnap-bot",
   "version": "1.0.0",
   "description": "Spaced Repetition Telegram Bot — remember everything you learn",
   "main": "dist/index.js",

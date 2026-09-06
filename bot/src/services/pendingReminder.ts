@@ -14,6 +14,7 @@ export type MissingField = "note" | "reminderType" | "date" | "time" | "recurren
 
 export interface ParsedReminder {
   note: string | null;
+  transcription?: string | null;
   reminderType: ReminderKind | null;
   date: string | null;
   time: string | null;
@@ -166,11 +167,19 @@ export function countOccurrences(reminder: PendingReminder, capturedAt?: string)
   return count > 0 ? count : null;
 }
 
-export function contentLabel(mediaType: string): string {
-  if (mediaType === "image") return "Rasm";
-  if (mediaType === "video") return "Video";
-  if (mediaType === "text") return "Xabar / Matn";
-  if (mediaType === "voice") return "Ovozli xabar";
+export function contentLabel(mediaType: string, initialText?: string): string {
+  if (mediaType === "image") return "📷 Rasm";
+  if (mediaType === "video") return "🎥 Video";
+  if (mediaType === "video_note") return "📹 Dumaloq video (Video note)";
+  if (mediaType === "text") return "📝 Matn / Xabar";
+  if (mediaType === "voice") return "🎙️ Ovozli xabar";
+  if (mediaType === "document") {
+    if (initialText) {
+      const fileName = initialText.length > 35 ? initialText.slice(0, 32) + "..." : initialText;
+      return `📄 Hujjat / Fayl (${fileName})`;
+    }
+    return "📄 Hujjat / Fayl (PDF, Doc va h.k.)";
+  }
   return mediaType;
 }
 
@@ -187,10 +196,10 @@ export function buildPreviewText(opts: {
   const scheduled = computeScheduledAt(reminder, capturedAt);
   if (!scheduled) return null;
 
-  let contentDesc = contentLabel(mediaType);
+  let contentDesc = contentLabel(mediaType, initialText);
   if (mediaType === "text" && initialText) {
     const previewSnippet = initialText.length > 60 ? initialText.slice(0, 57) + "..." : initialText;
-    contentDesc = `Xabar ("${previewSnippet}")`;
+    contentDesc = `📝 Xabar ("${previewSnippet}")`;
   }
 
   const lines = [
@@ -237,7 +246,7 @@ export function buildCreatedMessage(reminder: PendingReminder): string {
   return `✅ Eslatma yaratildi!\n\nSizga ${formatLongDate(reminder.date!, reminder.timezone)} kuni soat ${reminder.time} da eslataman.`;
 }
 
-export function logReminder(event: string, data?: Record<string, unknown>): void {
+export function logReminder(event: string, data?: unknown): void {
   if (data) {
     console.log(`[REMINDER] ${event}`, JSON.stringify(data));
   } else {

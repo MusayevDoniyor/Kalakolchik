@@ -1,4 +1,4 @@
-# 🔔 Kalakolchik — Spaced Repetition Telegram Bot
+# 🧠 MindSnap — Spaced Repetition Telegram Bot
 
 > Fight the forgetting curve. Send notes, photos, and videos to this Telegram bot and receive smart, scheduled reminders to help you remember what matters.
 
@@ -97,7 +97,7 @@ npm run dev
 
 You should see:
 ```
-🔔 Kalakolchik Bot is starting...
+🧠 MindSnap Bot is starting...
 [Scheduler] Reminder scheduler started — running every minute.
 ✅ Bot is running as @YourBotName
 📬 Listening for messages...

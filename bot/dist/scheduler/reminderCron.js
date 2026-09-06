@@ -39,6 +39,44 @@ function startReminderScheduler() {
                     // Send text note
                     await index_1.bot.api.sendMessage(telegram_id, reminderHeader + (content_text ?? "_(saqlangan xabar)_"), { parse_mode: "Markdown" });
                 }
+                else if (media_type === "voice" && media_url) {
+                    // Send voice note (supports Telegram file_id or external URL)
+                    const voiceInput = media_url.startsWith("http")
+                        ? new grammy_1.InputFile(new URL(media_url))
+                        : media_url;
+                    try {
+                        await index_1.bot.api.sendVoice(telegram_id, voiceInput, {
+                            caption: reminderHeader + (content_text ?? ""),
+                            parse_mode: "Markdown",
+                        });
+                    }
+                    catch {
+                        try {
+                            await index_1.bot.api.sendAudio(telegram_id, voiceInput, {
+                                caption: reminderHeader + (content_text ?? ""),
+                                parse_mode: "Markdown",
+                            });
+                        }
+                        catch {
+                            await index_1.bot.api.sendMessage(telegram_id, reminderHeader + (content_text ?? "_(Ovozli eslatma)_"), { parse_mode: "Markdown" });
+                        }
+                    }
+                }
+                else if (media_type === "document" && media_url) {
+                    // Send document / PDF / file
+                    const docInput = media_url.startsWith("http")
+                        ? new grammy_1.InputFile(new URL(media_url))
+                        : media_url;
+                    try {
+                        await index_1.bot.api.sendDocument(telegram_id, docInput, {
+                            caption: reminderHeader + (content_text ?? ""),
+                            parse_mode: "Markdown",
+                        });
+                    }
+                    catch {
+                        await index_1.bot.api.sendMessage(telegram_id, reminderHeader + (content_text ?? "_(Hujjat eslatmasi)_") + (media_url.startsWith("http") ? `\n\n🔗 [Hujjatni ochish](${media_url})` : ""), { parse_mode: "Markdown" });
+                    }
+                }
                 else if (media_type === "image" && media_url) {
                     // Send photo (supports Telegram file_id or external URL)
                     const photoInput = media_url.startsWith("http")
@@ -49,8 +87,29 @@ function startReminderScheduler() {
                         parse_mode: "Markdown",
                     });
                 }
+                else if (media_type === "video_note" && media_url) {
+                    // Send circle video note (supports Telegram file_id or external URL)
+                    const noteInput = media_url.startsWith("http")
+                        ? new grammy_1.InputFile(new URL(media_url))
+                        : media_url;
+                    try {
+                        await index_1.bot.api.sendVideoNote(telegram_id, noteInput);
+                        await index_1.bot.api.sendMessage(telegram_id, reminderHeader + (content_text ?? ""), { parse_mode: "Markdown" });
+                    }
+                    catch {
+                        try {
+                            await index_1.bot.api.sendVideo(telegram_id, noteInput, {
+                                caption: reminderHeader + (content_text ?? ""),
+                                parse_mode: "Markdown",
+                            });
+                        }
+                        catch {
+                            await index_1.bot.api.sendMessage(telegram_id, reminderHeader + (content_text ?? "_(Dumaloq video eslatmasi)_") + (media_url.startsWith("http") ? `\n\n🔗 [Videoni ko'rish](${media_url})` : ""), { parse_mode: "Markdown" });
+                        }
+                    }
+                }
                 else if (media_type === "video" && media_url) {
-                    // Send video / document (supports Telegram file_id or external URL)
+                    // Send video / voice / document (supports Telegram file_id or external URL)
                     const videoInput = media_url.startsWith("http")
                         ? new grammy_1.InputFile(new URL(media_url))
                         : media_url;
@@ -60,12 +119,27 @@ function startReminderScheduler() {
                             parse_mode: "Markdown",
                         });
                     }
-                    catch (vidErr) {
-                        // If it's a document/file sent as video, fallback to sendDocument
-                        await index_1.bot.api.sendDocument(telegram_id, videoInput, {
-                            caption: reminderHeader + (content_text ?? ""),
-                            parse_mode: "Markdown",
-                        });
+                    catch {
+                        try {
+                            await index_1.bot.api.sendVoice(telegram_id, videoInput, {
+                                caption: reminderHeader + (content_text ?? ""),
+                                parse_mode: "Markdown",
+                            });
+                        }
+                        catch {
+                            try {
+                                await index_1.bot.api.sendAudio(telegram_id, videoInput, {
+                                    caption: reminderHeader + (content_text ?? ""),
+                                    parse_mode: "Markdown",
+                                });
+                            }
+                            catch {
+                                await index_1.bot.api.sendDocument(telegram_id, videoInput, {
+                                    caption: reminderHeader + (content_text ?? ""),
+                                    parse_mode: "Markdown",
+                                });
+                            }
+                        }
                     }
                 }
                 else {

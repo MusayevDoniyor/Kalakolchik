@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.startHandler = startHandler;
+exports.newReminderHandler = newReminderHandler;
 const userService_1 = require("../../services/userService");
 // ----------------------------------------------------------------
 // /start command handler
@@ -23,4 +24,11 @@ async function startHandler(ctx) {
 
 Eslatib turishim kerak bo'lgan rasm, video, audio yoki xabarni yuboring:`;
     await ctx.reply(welcomeMessage, { parse_mode: "Markdown" });
+}
+async function newReminderHandler(ctx) {
+    const telegramId = ctx.from?.id;
+    if (!telegramId)
+        return;
+    ctx.session.pending = { step: "awaiting_media", mediaType: "text" };
+    await ctx.reply("📝 Yangi eslatma yaratish uchun rasm, video, audio, ovozli xabar yoki matn yuboring:");
 }

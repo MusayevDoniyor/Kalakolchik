@@ -1,19 +1,25 @@
-import { CommandContext } from "grammy";
+import { CommandContext, CallbackQueryContext } from "grammy";
 import { BotContext } from "../index";
 import { getActiveCyclesForUser } from "../../services/reminderService";
 import { buildStopCycleKeyboard } from "../keyboards";
 
 import { getUserTimezone } from "../../services/userService";
-import { formatZoned } from "../../utils/timezone";
+import { cleanReminderTitle, getMediaIcon, formatBadgeDate } from "../../utils/reminderFormatter";
 
 // ----------------------------------------------------------------
 // /stop command handler
 // Shows active recurring cycles and allows user to stop them.
 // ----------------------------------------------------------------
 
-export async function stopHandler(ctx: CommandContext<BotContext>): Promise<void> {
+export async function stopHandler(
+  ctx: CommandContext<BotContext> | CallbackQueryContext<BotContext>
+): Promise<void> {
   const telegramId = ctx.from?.id;
   if (!telegramId) return;
+
+  if ("callbackQuery" in ctx && ctx.callbackQuery) {
+    await ctx.answerCallbackQuery();
+  }
 
   try {
     const timezone = await getUserTimezone(telegramId);
@@ -28,12 +34,13 @@ export async function stopHandler(ctx: CommandContext<BotContext>): Promise<void
     let message = "🔄 **Faol takrorlanuvchi eslatmalaringiz:**\n\n";
     
     activeCycles.forEach((cycle, index) => {
-      const noteText = cycle.content_text || "Izohsiz";
-      const scheduledDate = formatZoned(new Date(cycle.scheduled_at), timezone);
-      message += `${index + 1}. **${noteText}**\n   ⏰ Keyingi: ${scheduledDate}\n\n`;
+      const title = cleanReminderTitle(cycle.content_text, cycle.media_type, 45);
+      const icon = getMediaIcon(cycle.media_type);
+      const dateBadge = formatBadgeDate(cycle.scheduled_at, timezone);
+      message += `${index + 1}. 🔁 ${icon} *${title}*\n   ⏰ Keyingi: ${dateBadge}\n\n`;
     });
 
-    message += "To'xtatmoqchi bo'lgan eslatmani tanlang:";
+    message += "To'xtatmoqchi bo'lgan eslatmangizni tanlang:";
 
     await ctx.reply(message, {
       parse_mode: "Markdown",

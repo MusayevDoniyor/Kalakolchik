@@ -29,16 +29,29 @@ async function uploadToStorage(buffer, filename, mimeType) {
  * Returns the full created memory object.
  */
 async function createMemory(params) {
-    const { data, error } = await supabase_1.supabase
-        .from("memories")
-        .insert({
+    const payload = {
         user_id: params.userId,
         media_type: params.mediaType,
         media_url: params.mediaUrl ?? null,
         content_text: params.contentText ?? null,
-    })
+    };
+    let { data, error } = await supabase_1.supabase
+        .from("memories")
+        .insert(payload)
         .select()
         .single();
+    // If database check constraint restricts to ('image', 'video', 'text') and rejects 'voice'
+    if (error && (error.code === "23514" || /media_type/i.test(error.message))) {
+        console.warn("[createMemory] DB constraint rejected media_type 'voice', saving as 'video' with audio URL");
+        payload.media_type = "video";
+        const retry = await supabase_1.supabase
+            .from("memories")
+            .insert(payload)
+            .select()
+            .single();
+        data = retry.data;
+        error = retry.error;
+    }
     if (error || !data) {
         throw new Error(`Failed to save memory: ${error?.message}`);
     }

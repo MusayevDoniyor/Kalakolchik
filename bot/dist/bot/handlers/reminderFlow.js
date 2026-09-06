@@ -12,7 +12,7 @@ const keyboards_1 = require("../keyboards");
 const dateParser_1 = require("../../utils/dateParser");
 const timezone_1 = require("../../utils/timezone");
 function dbMediaType(mediaType) {
-    return mediaType === "voice" ? "text" : mediaType;
+    return mediaType;
 }
 async function continueReminderCollection(ctx) {
     const pending = ctx.session.pending;

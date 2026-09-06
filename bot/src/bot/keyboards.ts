@@ -15,13 +15,14 @@ export function buildOneTimeKeyboard(): InlineKeyboard {
     .text("✏️ Boshqa sana", "remind_custom");
 }
 
+import { cleanReminderTitle } from "../utils/reminderFormatter";
+
 export function buildStopCycleKeyboard(cycles: any[]): InlineKeyboard {
   const keyboard = new InlineKeyboard();
 
   cycles.forEach((cycle, index) => {
-    const noteText = cycle.content_text || "Izohsiz";
-    const truncatedNote = noteText.length > 20 ? noteText.substring(0, 20) + "..." : noteText;
-    const buttonLabel = `🛑 ${truncatedNote}`;
+    const title = cleanReminderTitle(cycle.content_text, cycle.media_type, 20);
+    const buttonLabel = `🛑 ${index + 1}. ${title}`;
     const callbackData = `stop_${cycle.reminder_id}`;
 
     keyboard.text(buttonLabel, callbackData);
@@ -83,5 +84,63 @@ export function buildTimezoneKeyboard(currentTimezone?: string): InlineKeyboard 
   });
 
   return keyboard;
+}
+
+/**
+ * Builds a keyboard listing active reminders for editing or deletion.
+ */
+export function buildReminderSelectKeyboard(
+  reminders: Array<{ reminder_id: string; content_text: string | null; media_type?: string }>,
+  prefix: "edit_pick_" | "del_pick_"
+): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+
+  reminders.forEach((r, index) => {
+    const icon = prefix === "edit_pick_" ? "✏️" : "🗑️";
+    const title = cleanReminderTitle(r.content_text, r.media_type, 20);
+    const label = `${icon} ${index + 1}. ${title}`;
+    const callbackData = `${prefix}${r.reminder_id}`;
+
+    keyboard.text(label, callbackData);
+
+    if ((index + 1) % 2 === 0 && index < reminders.length - 1) {
+      keyboard.row();
+    }
+  });
+
+  return keyboard;
+}
+
+/**
+ * Menu keyboard for choosing which field of a reminder to edit.
+ */
+export function buildEditReminderMenuKeyboard(reminderId: string): InlineKeyboard {
+  return new InlineKeyboard()
+    .text("🎯 Izohni tahrirlash", `edt_note_${reminderId}`)
+    .text("📅 Sanani o'zgartirish", `edt_date_${reminderId}`)
+    .row()
+    .text("⏰ Vaqtni o'zgartirish", `edt_time_${reminderId}`)
+    .text("🔁 Takrorlanishni o'zgartirish", `edt_freq_${reminderId}`)
+    .row()
+    .text("⬅️ Bekor qilish", "edt_cancel");
+}
+
+/**
+ * Confirmation keyboard for deleting a reminder.
+ */
+export function buildConfirmDeleteKeyboard(reminderId: string): InlineKeyboard {
+  return new InlineKeyboard()
+    .text("🗑️ Ha, o'chirilsin", `del_confirm_${reminderId}`)
+    .text("❌ Bekor qilish", "del_cancel");
+}
+
+/**
+ * Action keyboard shown under /reminders list for quick access.
+ */
+export function buildRemindersListKeyboard(): InlineKeyboard {
+  return new InlineKeyboard()
+    .text("✏️ Tahrirlash", "cmd_edit")
+    .text("🗑️ O'chirish", "cmd_delete")
+    .text("🛑 To'xtatish", "cmd_stop");
 }
 

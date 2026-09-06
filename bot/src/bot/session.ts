@@ -36,10 +36,18 @@ export interface PendingReminder {
   useCapturedTime: boolean;
 }
 
+export interface ActiveEditingSession {
+  reminderId: string;
+  field?: "note" | "date" | "time" | "frequency";
+  currentText?: string | null;
+  scheduledAt?: string;
+  isRecurring?: boolean;
+}
+
 export interface SessionData {
   pending?: {
     step: ConversationStep;
-    mediaType: "image" | "video" | "text" | "voice";
+    mediaType: "image" | "video" | "text" | "voice" | "document" | "video_note";
     mediaUrl?: string;
     initialText?: string;
     noteText?: string;
@@ -47,4 +55,6 @@ export interface SessionData {
     capturedAt?: string;
     reminder?: PendingReminder;
   };
+  editing?: ActiveEditingSession;
 }
+

@@ -5,6 +5,7 @@ exports.saveMemoryAndReminder = saveMemoryAndReminder;
 exports.sendSummaryCard = sendSummaryCard;
 exports.scheduleCallbackHandler = scheduleCallbackHandler;
 exports.textInputHandler = textInputHandler;
+exports.timezoneCallbackHandler = timezoneCallbackHandler;
 exports.stopCycleCallbackHandler = stopCycleCallbackHandler;
 const userService_1 = require("../../services/userService");
 const memoryService_1 = require("../../services/memoryService");
@@ -12,17 +13,10 @@ const reminderService_1 = require("../../services/reminderService");
 const keyboards_1 = require("../keyboards");
 const dateParser_1 = require("../../utils/dateParser");
 const reminderFlow_1 = require("./reminderFlow");
-function formatDate(date) {
-    return date.toLocaleString("en-US", {
-        weekday: "short",
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        timeZone: "UTC",
-        hour12: false,
-    }) + " UTC";
+const userService_2 = require("../../services/userService");
+const timezone_1 = require("../../utils/timezone");
+function formatDate(date, timeZone = timezone_1.DEFAULT_TIMEZONE) {
+    return (0, timezone_1.formatZonedWithTz)(date, timeZone);
 }
 async function saveMemoryAndReminder(telegramId, session, scheduledAt, isRecurring, recurringIntervalMinutes) {
     const pending = session.pending;
@@ -38,18 +32,18 @@ async function saveMemoryAndReminder(telegramId, session, scheduledAt, isRecurri
     }
     const memory = await (0, memoryService_1.createMemory)({
         userId,
-        mediaType: pending.mediaType === "voice" ? "text" : pending.mediaType,
+        mediaType: pending.mediaType,
         mediaUrl: pending.mediaUrl,
         contentText: finalContentText || undefined,
     });
     await (0, reminderService_1.createReminder)(memory.id, scheduledAt, isRecurring, recurringIntervalMinutes);
 }
 /**
- * Send the final summary card.
+ * Send the final summary card with user's timezone.
  */
-async function sendSummaryCard(ctx, noteText, typeText, scheduledAt) {
+async function sendSummaryCard(ctx, noteText, typeText, scheduledAt, timeZone = timezone_1.DEFAULT_TIMEZONE) {
     const note = noteText ? `\n📌 **Izoh:** ${noteText}` : "";
-    await ctx.reply(`✅ **Eslatma muvaffaqiyatli saqlandi!**${note}\n🗓️ **Turi:** ${typeText}\n⏰ **Keyingi eslatma:** ${formatDate(scheduledAt)}`, { parse_mode: "Markdown" });
+    await ctx.reply(`✅ **Eslatma muvaffaqiyatli saqlandi!**${note}\n🗓️ **Turi:** ${typeText}\n⏰ **Keyingi eslatma:** ${formatDate(scheduledAt, timeZone)}`, { parse_mode: "Markdown" });
 }
 /**
  * Main callback handler for schedule button presses.
@@ -103,10 +97,11 @@ async function scheduleCallbackHandler(ctx) {
             return; // Ignore unknown callback
         const scheduledAt = new Date(Date.now() + addMinutes * 60 * 1000);
         try {
+            const userTz = await (0, userService_2.getUserTimezone)(telegramId);
             await saveMemoryAndReminder(telegramId, ctx.session, scheduledAt, false, null);
             const noteText = pending.noteText;
             ctx.session.pending = undefined; // Clear session
-            await sendSummaryCard(ctx, noteText, "Bir martalik", scheduledAt);
+            await sendSummaryCard(ctx, noteText, "Bir martalik", scheduledAt, userTz);
         }
         catch (err) {
             console.error("[scheduleCallbackHandler] Error saving to DB:", err);
@@ -120,19 +115,30 @@ async function scheduleCallbackHandler(ctx) {
  */
 async function textInputHandler(ctx) {
     const pending = ctx.session.pending;
-    if (!pending)
-        return false;
     const text = ctx.message?.text?.trim();
-    if (!text)
-        return false;
     const telegramId = ctx.from?.id;
-    if (!telegramId)
+    if (!telegramId || !text)
+        return false;
+    // Check if user is typing a manual timezone (e.g. "Asia/Tashkent" or "Europe/Moscow")
+    if (!pending && (0, timezone_1.isValidTimeZone)(text)) {
+        try {
+            await (0, userService_2.setUserTimezone)(telegramId, text);
+            const nowStr = (0, timezone_1.formatZoned)(new Date(), text);
+            await ctx.reply(`✅ Vaqt mintaqangiz muvaffaqiyatli saqlandi: \`${text}\`\nHozirgi mahalliy vaqtingiz: *${nowStr}*`, { parse_mode: "Markdown" });
+            return true;
+        }
+        catch (err) {
+            console.error("[textInputHandler] Error updating timezone:", err);
+        }
+    }
+    if (!pending)
         return false;
     if (await (0, reminderFlow_1.handleReminderText)(ctx))
         return true;
+    const userTz = await (0, userService_2.getUserTimezone)(telegramId);
     // --- Custom One-Time Date ---
     if (pending.step === "awaiting_one_time_date") {
-        const scheduledAt = (0, dateParser_1.parseCustomDate)(text);
+        const scheduledAt = (0, dateParser_1.parseCustomDate)(text, userTz);
         if (!scheduledAt) {
             await ctx.reply("❌ Noto'g'ri sana formati yoki o'tib ketgan sana kiritildi. Iltimos, `KK/OO/YYYY` yoki `KK/OO/YYYY SS:DD` formatida kiriting.", { parse_mode: "Markdown" });
             return true;
@@ -141,7 +147,7 @@ async function textInputHandler(ctx) {
             await saveMemoryAndReminder(telegramId, ctx.session, scheduledAt, false, null);
             const noteText = pending.noteText;
             ctx.session.pending = undefined;
-            await sendSummaryCard(ctx, noteText, "Bir martalik", scheduledAt);
+            await sendSummaryCard(ctx, noteText, "Bir martalik", scheduledAt, userTz);
         }
         catch (err) {
             console.error("[textInputHandler] Error saving custom date:", err);
@@ -161,7 +167,7 @@ async function textInputHandler(ctx) {
             await saveMemoryAndReminder(telegramId, ctx.session, scheduledAt, true, intervalMinutes);
             const noteText = pending.noteText;
             ctx.session.pending = undefined;
-            await sendSummaryCard(ctx, noteText, "Davriy (takrorlanuvchi)", scheduledAt);
+            await sendSummaryCard(ctx, noteText, "Davriy (takrorlanuvchi)", scheduledAt, userTz);
         }
         catch (err) {
             console.error("[textInputHandler] Error saving cycle interval:", err);
@@ -170,6 +176,27 @@ async function textInputHandler(ctx) {
         return true;
     }
     return false;
+}
+/**
+ * Handles timezone button callback selections.
+ * Callback data format: "tz_{timeZone}"
+ */
+async function timezoneCallbackHandler(ctx) {
+    const data = ctx.callbackQuery.data;
+    await ctx.answerCallbackQuery();
+    const telegramId = ctx.from?.id;
+    if (!telegramId || !data?.startsWith("tz_"))
+        return;
+    const newTz = data.replace("tz_", "");
+    try {
+        await (0, userService_2.setUserTimezone)(telegramId, newTz);
+        const nowStr = (0, timezone_1.formatZoned)(new Date(), newTz);
+        await ctx.reply(`✅ Vaqt mintaqangiz muvaffaqiyatli saqlandi: \`${newTz}\`\nHozirgi mahalliy vaqtingiz: *${nowStr}*`, { parse_mode: "Markdown" });
+    }
+    catch (err) {
+        console.error("[timezoneCallbackHandler] Error saving timezone:", err);
+        await ctx.reply("❌ Vaqt mintaqasini saqlashda xatolik yuz berdi.");
+    }
 }
 /**
  * Handles callback queries for stopping cycles.
@@ -184,14 +211,15 @@ async function stopCycleCallbackHandler(ctx) {
         return;
     }
     const reminderId = data.replace("stop_", "");
-    console.log("[stopCycleCallbackHandler] Stopping reminder:", reminderId);
+    const telegramId = ctx.from?.id;
+    console.log("[stopCycleCallbackHandler] Stopping reminder:", reminderId, "by user:", telegramId);
     try {
-        await (0, reminderService_1.stopReminder)(reminderId);
+        await (0, reminderService_1.stopReminder)(reminderId, telegramId);
         console.log("[stopCycleCallbackHandler] Successfully stopped reminder:", reminderId);
         await ctx.reply("✅ Eslatma muvaffaqiyatli to'xtatildi. Ushbu xotira bo'yicha boshqa eslatmalar olmaysiz.");
     }
     catch (err) {
         console.error("[stopCycleCallbackHandler] Error:", err);
-        await ctx.reply("❌ Eslatmani to'xtatishda xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.");
+        await ctx.reply(err.message || "❌ Eslatmani to'xtatishda xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.");
     }
 }

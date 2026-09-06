@@ -7,7 +7,7 @@ import { startReminderScheduler } from "./scheduler/reminderCron";
 // ----------------------------------------------------------------
 
 async function main(): Promise<void> {
-  console.log("🔔 Kalakolchik Bot is starting...");
+  console.log("🧠 MindSnap Bot is starting...");
 
   // Register default bot commands with Telegram
   await registerBotCommands(bot);

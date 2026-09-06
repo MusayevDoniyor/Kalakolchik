@@ -39,9 +39,10 @@ Return ONLY valid JSON with these keys:
 - "recurrenceText": string | null — e.g. "Har kuni", "Har 2 kunda", "Har hafta" (or "Every day" if English)
 - "endDate": "YYYY-MM-DD" | null — e.g. "1-sentabrgacha", "7 kun davomida"
 - "useUploadTime": boolean — true ONLY if the user explicitly asked for the same time as sending/uploading
+- "transcription": string | null — a concise transcript or summary of what was spoken, especially if the user is dictating a memo or thought
 
 Do not default reminderType to recurring. Do not fill time unless stated or unambiguously implied as a clock time.
-Example: {"note":"Maqolani o'qish","reminderType":"recurring","date":null,"time":"20:00","timezone":"${timezone}","intervalMinutes":1440,"recurrenceText":"Har kuni","endDate":"2026-09-01","useUploadTime":false}`;
+Example: {"note":"Maqolani o'qish","reminderType":"recurring","date":null,"time":"20:00","timezone":"${timezone}","intervalMinutes":1440,"recurrenceText":"Har kuni","endDate":"2026-09-01","useUploadTime":false,"transcription":"Har kuni kechki 8 da maqolani o'qishni eslat"}`;
 }
 const MODEL_FALLBACK_CHAIN = [
     "gemini-2.5-flash",
@@ -112,6 +113,7 @@ function normalizeParsed(raw, fallbackTz) {
     const useUploadTime = raw.useUploadTime === true;
     return {
         note: nullishString(raw.note),
+        transcription: nullishString(raw.transcription),
         reminderType,
         date: nullishString(raw.date),
         time: useUploadTime ? null : time,

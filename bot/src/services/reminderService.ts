@@ -196,6 +196,18 @@ export async function processReminderSent(
  * Returns reminders with memory details for display.
  */
 export async function getActiveCyclesForUser(telegramId: number): Promise<ActiveCycle[]> {
+  const { data: user, error: userError } = await supabase
+    .from("users")
+    .select("id")
+    .eq("telegram_id", telegramId)
+    .maybeSingle();
+
+  if (userError) {
+    throw new Error(`Failed to find user: ${userError.message}`);
+  }
+
+  if (!user) return [];
+
   const { data, error } = await supabase
     .from("reminders")
     .select(
@@ -208,15 +220,14 @@ export async function getActiveCyclesForUser(telegramId: number): Promise<Active
         content_text,
         media_type,
         media_url,
-        users!inner (
-          telegram_id
-        )
+        user_id
       )
     `
     )
     .eq("is_recurring", true)
     .eq("status", "pending")
-    .eq("memories.users.telegram_id", telegramId);
+    .eq("memories.user_id", user.id)
+    .order("scheduled_at", { ascending: true });
 
   if (error) {
     throw new Error(`Failed to fetch active cycles: ${error.message}`);
@@ -224,9 +235,8 @@ export async function getActiveCyclesForUser(telegramId: number): Promise<Active
 
   if (!data) return [];
 
-  // Flatten the nested join result into a flat structure
   return data
-    .filter((row: any) => row.memories && row.memories.users)
+    .filter((row: any) => row.memories)
     .map((row: any) => ({
       reminder_id: row.id,
       memory_id: row.memories.id,
@@ -245,6 +255,20 @@ export async function stopReminder(reminderId: string, telegramId?: number): Pro
   console.log("[stopReminder] Attempting to stop reminder:", reminderId, "by user:", telegramId);
 
   if (telegramId) {
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("telegram_id", telegramId)
+      .maybeSingle();
+
+    if (userError) {
+      throw new Error(`Failed to find user: ${userError.message}`);
+    }
+
+    if (!user) {
+      throw new Error("Foydalanuvchi topilmadi.");
+    }
+
     // Verify ownership so a user cannot stop another user's reminder
     const { data: reminder, error: checkError } = await supabase
       .from("reminders")
@@ -252,14 +276,12 @@ export async function stopReminder(reminderId: string, telegramId?: number): Pro
         `
         id,
         memories!inner (
-          users!inner (
-            telegram_id
-          )
+          user_id
         )
       `
       )
       .eq("id", reminderId)
-      .eq("memories.users.telegram_id", telegramId)
+      .eq("memories.user_id", user.id)
       .maybeSingle();
 
     if (checkError) {
@@ -304,38 +326,65 @@ export interface UserReminderItem {
  * ordered by scheduled_at ascending.
  */
 export async function getUserReminders(telegramId: number): Promise<UserReminderItem[]> {
-  const { data, error } = await supabase
-    .from("reminders")
-    .select(
-      `
+  const { data: user, error: userError } = await supabase
+    .from("users")
+    .select("id")
+    .eq("telegram_id", telegramId)
+    .maybeSingle();
+
+  if (userError) {
+    throw new Error(`Failed to find user: ${userError.message}`);
+  }
+
+  if (!user) return [];
+
+  const baseSelect = `
       id,
       scheduled_at,
       is_recurring,
       recurring_interval_minutes,
-      end_date,
       memories!inner (
         id,
         content_text,
         media_type,
         media_url,
-        users!inner (
-          telegram_id
-        )
+        user_id
       )
-    `
-    )
+  `;
+
+  let data: any[] | null = null;
+  let hasEndDate = true;
+
+  const first = await supabase
+    .from("reminders")
+    .select(baseSelect.replace("recurring_interval_minutes,", "recurring_interval_minutes,\n      end_date,"))
     .eq("status", "pending")
-    .eq("memories.users.telegram_id", telegramId)
+    .eq("memories.user_id", user.id)
     .order("scheduled_at", { ascending: true });
 
-  if (error) {
-    throw new Error(`Failed to fetch user reminders: ${error.message}`);
+  if (first.error && /end_date/i.test(first.error.message)) {
+    hasEndDate = false;
+    const fallback = await supabase
+      .from("reminders")
+      .select(baseSelect)
+      .eq("status", "pending")
+      .eq("memories.user_id", user.id)
+      .order("scheduled_at", { ascending: true });
+
+    if (fallback.error) {
+      throw new Error(`Failed to fetch user reminders: ${fallback.error.message}`);
+    }
+    data = fallback.data;
+  } else if (first.error) {
+    throw new Error(`Failed to fetch user reminders: ${first.error.message}`);
+  } else {
+    data = first.data;
   }
 
   if (!data) return [];
 
   return data
-    .filter((row: any) => row.memories && row.memories.users)
+    .filter((row: any) => row.memories)
     .map((row: any) => ({
       reminder_id: row.id,
       memory_id: row.memories.id,
@@ -345,7 +394,138 @@ export async function getUserReminders(telegramId: number): Promise<UserReminder
       scheduled_at: row.scheduled_at,
       is_recurring: row.is_recurring,
       recurring_interval_minutes: row.recurring_interval_minutes,
-      end_date: row.end_date ?? null,
+      end_date: hasEndDate ? (row.end_date ?? null) : null,
     }));
 }
+
+/**
+ * Fetches a single reminder by ID, verifying ownership via telegramId.
+ */
+export async function getReminderById(
+  reminderId: string,
+  telegramId: number
+): Promise<UserReminderItem | null> {
+  const { data: user, error: userError } = await supabase
+    .from("users")
+    .select("id")
+    .eq("telegram_id", telegramId)
+    .maybeSingle();
+
+  if (userError || !user) return null;
+
+  const { data, error } = await supabase
+    .from("reminders")
+    .select(
+      `
+      id,
+      scheduled_at,
+      is_recurring,
+      recurring_interval_minutes,
+      status,
+      memories!inner (
+        id,
+        content_text,
+        media_type,
+        media_url,
+        user_id
+      )
+    `
+    )
+    .eq("id", reminderId)
+    .eq("memories.user_id", user.id)
+    .maybeSingle();
+
+  if (error || !data) return null;
+
+  return {
+    reminder_id: data.id,
+    memory_id: (data.memories as any).id,
+    content_text: (data.memories as any).content_text,
+    media_type: (data.memories as any).media_type,
+    media_url: (data.memories as any).media_url,
+    scheduled_at: data.scheduled_at,
+    is_recurring: data.is_recurring,
+    recurring_interval_minutes: data.recurring_interval_minutes,
+    end_date: (data as any).end_date ?? null,
+  };
+}
+
+/**
+ * Updates an existing reminder and its associated memory note text.
+ */
+export async function updateReminder(params: {
+  reminderId: string;
+  telegramId: number;
+  contentText?: string;
+  scheduledAt?: Date;
+  isRecurring?: boolean;
+  recurringIntervalMinutes?: number | null;
+  endDate?: string | null;
+}): Promise<void> {
+  const existing = await getReminderById(params.reminderId, params.telegramId);
+  if (!existing) {
+    throw new Error("Eslatma topilmadi yoki sizga tegishli emas.");
+  }
+
+  // Update memory content_text if specified
+  if (params.contentText !== undefined) {
+    const { error: memError } = await supabase
+      .from("memories")
+      .update({ content_text: params.contentText })
+      .eq("id", existing.memory_id);
+
+    if (memError) {
+      throw new Error(`Matnni yangilashda xatolik: ${memError.message}`);
+    }
+  }
+
+  // Update reminder fields if specified
+  const reminderUpdates: Record<string, unknown> = {};
+  if (params.scheduledAt !== undefined) {
+    reminderUpdates.scheduled_at = params.scheduledAt.toISOString();
+  }
+  if (params.isRecurring !== undefined) {
+    reminderUpdates.is_recurring = params.isRecurring;
+  }
+  if (params.recurringIntervalMinutes !== undefined) {
+    reminderUpdates.recurring_interval_minutes = params.recurringIntervalMinutes;
+  }
+  if (params.endDate !== undefined) {
+    reminderUpdates.end_date = params.endDate;
+  }
+
+  if (Object.keys(reminderUpdates).length > 0) {
+    const { error: remError } = await supabase
+      .from("reminders")
+      .update(reminderUpdates)
+      .eq("id", params.reminderId);
+
+    if (remError) {
+      throw new Error(`Eslatmani yangilashda xatolik: ${remError.message}`);
+    }
+  }
+}
+
+/**
+ * Permanently deletes a reminder from the database after verifying ownership.
+ */
+export async function deleteReminder(
+  reminderId: string,
+  telegramId: number
+): Promise<void> {
+  const existing = await getReminderById(reminderId, telegramId);
+  if (!existing) {
+    throw new Error("Eslatma topilmadi yoki sizga tegishli emas.");
+  }
+
+  const { error } = await supabase
+    .from("reminders")
+    .delete()
+    .eq("id", reminderId);
+
+  if (error) {
+    throw new Error(`Eslatmani o'chirishda xatolik: ${error.message}`);
+  }
+}
+
 

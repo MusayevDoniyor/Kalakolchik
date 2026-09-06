@@ -91,22 +91,33 @@ export async function receiveMediaHandler(ctx: BotContext): Promise<void> {
         initialText: msg.caption ?? undefined,
         capturedAt: new Date().toISOString(),
       };
-    } else if (msg.document) {
-      // --- Document / Any file (PDF, Zip, Video, etc.) ---
+    } else if (msg.video_note) {
+      // --- Circle video note (Dumaloq video) ---
       ctx.session.pending = {
         step: "awaiting_note",
-        mediaType: "video", // or image if image mime, but video/file container works seamlessly
+        mediaType: "video_note",
+        mediaUrl: msg.video_note.file_id,
+        initialText: "📹 Dumaloq video",
+        capturedAt: new Date().toISOString(),
+      };
+    } else if (msg.document) {
+      // --- Document / Any file (PDF, DOCX, ZIP, etc.) ---
+      const fileName = msg.document.file_name || "Hujjat";
+      ctx.session.pending = {
+        step: "awaiting_note",
+        mediaType: "document",
         mediaUrl: msg.document.file_id,
-        initialText: msg.caption ?? msg.document.file_name ?? undefined,
+        initialText: msg.caption ?? fileName,
         capturedAt: new Date().toISOString(),
       };
     } else if (msg.audio) {
       // --- Audio / Music ---
+      const audioTitle = msg.audio.title || msg.audio.file_name || "Audio fayl";
       ctx.session.pending = {
         step: "awaiting_note",
-        mediaType: "video",
+        mediaType: "voice",
         mediaUrl: msg.audio.file_id,
-        initialText: msg.caption ?? msg.audio.title ?? undefined,
+        initialText: msg.caption ?? audioTitle,
         capturedAt: new Date().toISOString(),
       };
     } else if (msg.text) {

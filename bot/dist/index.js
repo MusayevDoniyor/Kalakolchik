@@ -7,7 +7,9 @@ const reminderCron_1 = require("./scheduler/reminderCron");
 // Starts the bot (long-polling) and the reminder scheduler.
 // ----------------------------------------------------------------
 async function main() {
-    console.log("🔔 Kalakolchik Bot is starting...");
+    console.log("🧠 MindSnap Bot is starting...");
+    // Register default bot commands with Telegram
+    await (0, index_1.registerBotCommands)(index_1.bot);
     // Start the background reminder scheduler
     (0, reminderCron_1.startReminderScheduler)();
     // Start the Telegram bot (long polling)

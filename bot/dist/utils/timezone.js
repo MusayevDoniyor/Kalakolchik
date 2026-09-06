@@ -4,7 +4,7 @@
 // Default is Asia/Tashkent until per-user timezone exists.
 // ----------------------------------------------------------------
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DEFAULT_TIMEZONE = void 0;
+exports.TIMEZONE_PRESETS = exports.DEFAULT_TIMEZONE = void 0;
 exports.getZonedParts = getZonedParts;
 exports.todayInTimeZone = todayInTimeZone;
 exports.timeInTimeZone = timeInTimeZone;
@@ -12,6 +12,9 @@ exports.nowContext = nowContext;
 exports.zonedWallTimeToUtc = zonedWallTimeToUtc;
 exports.formatLongDate = formatLongDate;
 exports.endOfDateInTimeZone = endOfDateInTimeZone;
+exports.isValidTimeZone = isValidTimeZone;
+exports.formatZoned = formatZoned;
+exports.formatZonedWithTz = formatZonedWithTz;
 exports.DEFAULT_TIMEZONE = "Asia/Tashkent";
 function pad(n) {
     return String(n).padStart(2, "0");
@@ -95,3 +98,41 @@ function formatLongDate(ymd, timeZone) {
 function endOfDateInTimeZone(ymd, timeZone) {
     return zonedWallTimeToUtc(ymd, "23:59", timeZone);
 }
+/**
+ * Validates if an IANA timezone string is recognized by Intl.
+ */
+function isValidTimeZone(timeZone) {
+    try {
+        Intl.DateTimeFormat(undefined, { timeZone });
+        return true;
+    }
+    catch {
+        return false;
+    }
+}
+/**
+ * Formats a Date in the given timezone as readable Uzbek date and time:
+ * e.g. "4-sentabr, 2026 20:15"
+ */
+function formatZoned(date, timeZone) {
+    const parts = getZonedParts(date, timeZone);
+    const monthName = UZ_MONTHS[parts.month - 1] ?? "";
+    return `${parts.day}-${monthName}, ${parts.year} ${parts.time}`;
+}
+/**
+ * Formats a Date in the given timezone with the timezone name:
+ * e.g. "4-sentabr, 2026 20:15 (Asia/Tashkent)"
+ */
+function formatZonedWithTz(date, timeZone) {
+    return `${formatZoned(date, timeZone)} (${timeZone})`;
+}
+exports.TIMEZONE_PRESETS = [
+    { label: "🇺🇿 Toshkent (UTC+5)", value: "Asia/Tashkent" },
+    { label: "🇺🇿 Samarqand (UTC+5)", value: "Asia/Samarkand" },
+    { label: "🇷🇺 Moskva (UTC+3)", value: "Europe/Moscow" },
+    { label: "🇦🇪 Dubay (UTC+4)", value: "Asia/Dubai" },
+    { label: "🇰🇿 Almati (UTC+5)", value: "Asia/Almaty" },
+    { label: "🇹🇷 Istanbul (UTC+3)", value: "Europe/Istanbul" },
+    { label: "🇬🇧 London (UTC+0/+1)", value: "Europe/London" },
+    { label: "🇺🇸 Nyu-York (UTC-5/-4)", value: "America/New_York" },
+];

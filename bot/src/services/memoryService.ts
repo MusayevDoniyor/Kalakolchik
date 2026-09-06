@@ -6,7 +6,7 @@ import { supabase } from "../db/supabase";
 // records to the `memories` table.
 // ----------------------------------------------------------------
 
-export type MediaType = "image" | "video" | "text" | "voice";
+export type MediaType = "image" | "video" | "text" | "voice" | "document" | "video_note";
 
 export interface Memory {
   id: string;
@@ -57,16 +57,31 @@ export async function createMemory(params: {
   mediaUrl?: string;
   contentText?: string;
 }): Promise<Memory> {
-  const { data, error } = await supabase
+  const payload: Record<string, unknown> = {
+    user_id: params.userId,
+    media_type: params.mediaType,
+    media_url: params.mediaUrl ?? null,
+    content_text: params.contentText ?? null,
+  };
+
+  let { data, error } = await supabase
     .from("memories")
-    .insert({
-      user_id: params.userId,
-      media_type: params.mediaType,
-      media_url: params.mediaUrl ?? null,
-      content_text: params.contentText ?? null,
-    })
+    .insert(payload)
     .select()
     .single();
+
+  // If database check constraint restricts to ('image', 'video', 'text') and rejects 'voice'
+  if (error && (error.code === "23514" || /media_type/i.test(error.message))) {
+    console.warn("[createMemory] DB constraint rejected media_type 'voice', saving as 'video' with audio URL");
+    payload.media_type = "video";
+    const retry = await supabase
+      .from("memories")
+      .insert(payload)
+      .select()
+      .single();
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error || !data) {
     throw new Error(`Failed to save memory: ${error?.message}`);

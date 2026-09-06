@@ -16,6 +16,19 @@ import {
   timezoneCallbackHandler,
 } from "./handlers/callbackHandler";
 import { voiceHandler } from "./handlers/voiceHandler";
+import {
+  editCommandHandler,
+  editSelectCallbackHandler,
+  editFieldCallbackHandler,
+  editTimeCallbackHandler,
+  handleEditTextInput,
+} from "./handlers/editHandler";
+import {
+  deleteCommandHandler,
+  deleteSelectCallbackHandler,
+  deleteConfirmCallbackHandler,
+  deleteCancelCallbackHandler,
+} from "./handlers/deleteHandler";
 
 // ----------------------------------------------------------------
 // Bot Initialization
@@ -34,6 +47,8 @@ export async function registerBotCommands(botInstance: Bot<BotContext>): Promise
       { command: "start", description: "Botni ishga tushirish / Xush kelibsiz" },
       { command: "new", description: "Yangi eslatma yaratish" },
       { command: "reminders", description: "Faol eslatmalar ro'yxati" },
+      { command: "edit", description: "Eslatmani tahrirlash" },
+      { command: "delete", description: "Eslatmani o'chirish" },
       { command: "stop", description: "Takrorlanuvchi eslatmalarni to'xtatish" },
       { command: "timezone", description: "Vaqt mintaqasini sozlash" },
       { command: "help", description: "Qo'llanma va yordam" },
@@ -49,7 +64,7 @@ export async function registerBotCommands(botInstance: Bot<BotContext>): Promise
 // Stores per-chat conversation state in memory.
 bot.use(
   session<SessionData, BotContext>({
-    initial: (): SessionData => ({ pending: undefined }),
+    initial: (): SessionData => ({ pending: undefined, editing: undefined }),
   })
 );
 
@@ -57,16 +72,39 @@ bot.use(
 bot.command("start", startHandler);
 bot.command("new", newReminderHandler);
 bot.command(["reminders", "list"], remindersHandler);
+bot.command("edit", editCommandHandler);
+bot.command(["delete", "del", "remove"], deleteCommandHandler);
 bot.command("stop", stopHandler);
 bot.command("timezone", timezoneHandler);
 bot.command(["about", "help"], helpHandler);
 bot.command("cancel", cancelHandler);
+
+// --- Quick Action Callbacks from /reminders list ---
+bot.callbackQuery("cmd_edit", editCommandHandler);
+bot.callbackQuery("cmd_delete", deleteCommandHandler);
+bot.callbackQuery("cmd_stop", stopHandler);
 
 // --- Timezone Selection Callback Handler ---
 bot.callbackQuery(/^tz_/, timezoneCallbackHandler);
 
 // --- Stop Cycle Callback Handler ---
 bot.callbackQuery(/^stop_/, stopCycleCallbackHandler);
+
+// --- Edit Reminder Callback Handlers ---
+bot.callbackQuery(/^edit_pick_/, editSelectCallbackHandler);
+bot.callbackQuery(/^edt_/, editFieldCallbackHandler);
+bot.callbackQuery(/^time_/, async (ctx, next) => {
+  if (ctx.session.editing?.field === "time") {
+    const handled = await editTimeCallbackHandler(ctx);
+    if (handled) return;
+  }
+  await next();
+});
+
+// --- Delete Reminder Callback Handlers ---
+bot.callbackQuery(/^del_pick_/, deleteSelectCallbackHandler);
+bot.callbackQuery(/^del_confirm_/, deleteConfirmCallbackHandler);
+bot.callbackQuery("del_cancel", deleteCancelCallbackHandler);
 
 // --- Inline Keyboard Callback Handlers ---
 // All callback data values emitted by reminder flow keyboards must be listed here.
@@ -92,22 +130,26 @@ bot.callbackQuery(
 // Must be registered BEFORE the generic text/media handler
 bot.on("message:voice", voiceHandler);
 
-// --- Message Handler (Text / Photo / Video / Document / Audio) ---
-bot.on(["message:text", "message:photo", "message:video", "message:document", "message:audio"], async (ctx) => {
+// --- Message Handler (Text / Photo / Video / Video Note / Document / Audio) ---
+bot.on(["message:text", "message:photo", "message:video", "message:video_note", "message:document", "message:audio"], async (ctx) => {
   const text = ctx.message?.text;
 
   // 1. Skip commands
   if (text?.startsWith("/")) return;
 
-  // 2. Handle text inputs for Custom Dates and Cycle Intervals (Step 4)
+  // 2. Handle text inputs for Edit Reminder Flow
+  const editHandled = await handleEditTextInput(ctx);
+  if (editHandled) return;
+
+  // 3. Handle text inputs for Custom Dates and Cycle Intervals (Step 4)
   const textHandled = await textInputHandler(ctx);
   if (textHandled) return;
 
-  // 3. If user is in "awaiting_note" step, receive their note (Step 2)
+  // 4. If user is in "awaiting_note" step, receive their note (Step 2)
   const noteHandled = await receiveNoteHandler(ctx);
   if (noteHandled) return;
 
-  // 4. Otherwise treat this as new media/content (Step 1)
+  // 5. Otherwise treat this as new media/content (Step 1)
   await receiveMediaHandler(ctx);
 });
 
@@ -115,3 +157,4 @@ bot.on(["message:text", "message:photo", "message:video", "message:document", "m
 bot.catch((err) => {
   console.error("[Bot Error]", err.message, "\n", err.error);
 });
+

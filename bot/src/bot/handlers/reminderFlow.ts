@@ -23,8 +23,8 @@ import { todayInTimeZone } from "../../utils/timezone";
 
 type BotContext = Context & SessionFlavor<SessionData>;
 
-function dbMediaType(mediaType: "image" | "video" | "text" | "voice"): MediaType {
-  return mediaType === "voice" ? "text" : mediaType;
+function dbMediaType(mediaType: MediaType): MediaType {
+  return mediaType;
 }
 
 export async function continueReminderCollection(ctx: BotContext): Promise<void> {

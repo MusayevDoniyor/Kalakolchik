@@ -38,7 +38,7 @@ export async function saveMemoryAndReminder(
 
   const memory = await createMemory({
     userId,
-    mediaType: pending.mediaType === "voice" ? "text" : pending.mediaType,
+    mediaType: pending.mediaType,
     mediaUrl: pending.mediaUrl,
     contentText: finalContentText || undefined,
   });

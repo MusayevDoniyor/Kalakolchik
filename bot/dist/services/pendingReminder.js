@@ -88,11 +88,9 @@ function computeScheduledAt(reminder, capturedAt) {
     if (!time)
         return null;
     let date = filled.date;
-    if (reminderType === "recurring" && !date) {
+    if (!date) {
         date = (0, timezone_1.todayInTimeZone)(timezone);
     }
-    if (!date)
-        return null;
     let dt = (0, timezone_1.zonedWallTimeToUtc)(date, time, timezone);
     if (!dt)
         return null;
@@ -107,6 +105,18 @@ function computeScheduledAt(reminder, capturedAt) {
             return null;
     }
     if (reminderType === "one_time" && dt.getTime() <= Date.now()) {
+        // If the date was not explicitly set or was today, roll over to tomorrow
+        if (!filled.date || filled.date === (0, timezone_1.todayInTimeZone)(timezone)) {
+            const parts = (0, timezone_1.getZonedParts)(new Date(), timezone);
+            const tomorrow = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + 1));
+            const pad2 = (n) => String(n).padStart(2, "0");
+            const nextDate = `${tomorrow.getUTCFullYear()}-${pad2(tomorrow.getUTCMonth() + 1)}-${pad2(tomorrow.getUTCDate())}`;
+            const nextDt = (0, timezone_1.zonedWallTimeToUtc)(nextDate, time, timezone);
+            if (nextDt && nextDt.getTime() > Date.now()) {
+                reminder.date = nextDate;
+                return nextDt;
+            }
+        }
         return null;
     }
     return dt;
@@ -129,15 +139,24 @@ function countOccurrences(reminder, capturedAt) {
     }
     return count > 0 ? count : null;
 }
-function contentLabel(mediaType) {
+function contentLabel(mediaType, initialText) {
     if (mediaType === "image")
-        return "Rasm";
+        return "📷 Rasm";
     if (mediaType === "video")
-        return "Video";
+        return "🎥 Video";
+    if (mediaType === "video_note")
+        return "📹 Dumaloq video (Video note)";
     if (mediaType === "text")
-        return "Xabar / Matn";
+        return "📝 Matn / Xabar";
     if (mediaType === "voice")
-        return "Ovozli xabar";
+        return "🎙️ Ovozli xabar";
+    if (mediaType === "document") {
+        if (initialText) {
+            const fileName = initialText.length > 35 ? initialText.slice(0, 32) + "..." : initialText;
+            return `📄 Hujjat / Fayl (${fileName})`;
+        }
+        return "📄 Hujjat / Fayl (PDF, Doc va h.k.)";
+    }
     return mediaType;
 }
 function buildPreviewText(opts) {
@@ -148,10 +167,10 @@ function buildPreviewText(opts) {
     const scheduled = computeScheduledAt(reminder, capturedAt);
     if (!scheduled)
         return null;
-    let contentDesc = contentLabel(mediaType);
+    let contentDesc = contentLabel(mediaType, initialText);
     if (mediaType === "text" && initialText) {
         const previewSnippet = initialText.length > 60 ? initialText.slice(0, 57) + "..." : initialText;
-        contentDesc = `Xabar ("${previewSnippet}")`;
+        contentDesc = `📝 Xabar ("${previewSnippet}")`;
     }
     const lines = [
         "🧠 Eslatma ko'rinishi",

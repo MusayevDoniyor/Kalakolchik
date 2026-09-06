@@ -2,7 +2,8 @@ import { CommandContext } from "grammy";
 import { BotContext } from "../index";
 import { getUserReminders } from "../../services/reminderService";
 import { getUserTimezone } from "../../services/userService";
-import { formatZoned } from "../../utils/timezone";
+import { cleanReminderTitle, getMediaIcon, formatBadgeDate } from "../../utils/reminderFormatter";
+import { buildRemindersListKeyboard } from "../keyboards";
 
 // ----------------------------------------------------------------
 // /reminders (and /list) command handler
@@ -27,29 +28,32 @@ export async function remindersHandler(ctx: CommandContext<BotContext>): Promise
     const oneTimes = reminders.filter((r) => !r.is_recurring);
     const recurring = reminders.filter((r) => r.is_recurring);
 
-    let message = `📋 *Sizning eslatmalaringiz* (Vaqt: \`${timezone}\`)\n\n`;
+    let message = `📋 *Sizning eslatmalaringiz* (🌐 \`${timezone}\`)\n\n`;
 
     if (oneTimes.length > 0) {
       message += `🕒 *Bir martalik eslatmalar (${oneTimes.length}):*\n`;
       oneTimes.forEach((item, index) => {
-        const text = item.content_text ? item.content_text.slice(0, 45) : "(Fayl / media)";
-        const dateStr = formatZoned(new Date(item.scheduled_at), timezone);
-        message += `${index + 1}. *${text}*\n   📅 ${dateStr}\n`;
+        const title = cleanReminderTitle(item.content_text, item.media_type, 45);
+        const icon = getMediaIcon(item.media_type);
+        const dateBadge = formatBadgeDate(item.scheduled_at, timezone);
+        message += `${index + 1}. ${icon} *${title}*\n   ⏰ ${dateBadge}\n\n`;
       });
-      message += "\n";
     }
 
     if (recurring.length > 0) {
       message += `🔄 *Takrorlanuvchi eslatmalar (${recurring.length}):*\n`;
       recurring.forEach((item, index) => {
-        const text = item.content_text ? item.content_text.slice(0, 45) : "(Fayl / media)";
-        const dateStr = formatZoned(new Date(item.scheduled_at), timezone);
-        message += `${index + 1}. *${text}*\n   ⏰ Keyingi: ${dateStr}\n`;
+        const title = cleanReminderTitle(item.content_text, item.media_type, 45);
+        const icon = getMediaIcon(item.media_type);
+        const dateBadge = formatBadgeDate(item.scheduled_at, timezone);
+        message += `${index + 1}. 🔁 ${icon} *${title}*\n   ⏰ Keyingi: ${dateBadge}\n\n`;
       });
-      message += "\n💡 Takrorlanuvchi eslatmalarni to'xtatish uchun: /stop";
     }
 
-    await ctx.reply(message, { parse_mode: "Markdown" });
+    await ctx.reply(message.trim(), {
+      parse_mode: "Markdown",
+      reply_markup: buildRemindersListKeyboard(),
+    });
   } catch (err) {
     console.error("[remindersHandler] Error:", err);
     await ctx.reply("❌ Eslatmalarni yuklashda xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.");
